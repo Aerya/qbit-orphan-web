@@ -244,6 +244,23 @@ async def do_scan(automatic=False):
         await notify('scan','Scan terminé',f"{len(orphans)} orphelin(s), {state['stats']['orphan_bytes']/1024**3:.2f} Gio récupérables")
         return state
 
+def prune_empty_parents(start:Path, stop:Path):
+    removed=[]
+    stop=stop.resolve(strict=False)
+    current=start.resolve(strict=False)
+    try:
+        current.relative_to(stop)
+    except ValueError:
+        return removed
+    while current != stop:
+        try:
+            current.rmdir()
+        except OSError:
+            break
+        removed.append(str(current))
+        current=current.parent
+    return removed
+
 async def delete_ids(ids,automatic=False):
     cfg=load_settings(); # Recollect globally before deletion
     results=await asyncio.gather(*(collect_client(c) for c in cfg['clients']),return_exceptions=True)
@@ -257,12 +274,36 @@ async def delete_ids(ids,automatic=False):
         if p in refs: skipped.append({'path':str(p),'reason':'désormais référencé'}); continue
         try: size=p.stat().st_size; p.unlink(); deleted.append(item); grouped.setdefault((item['client_id'],item['client_name']),[0,0]); grouped[(item['client_id'],item['client_name'])][0]+=1; grouped[(item['client_id'],item['client_name'])][1]+=size
         except Exception as e: skipped.append({'path':str(p),'reason':str(e)})
+    roots={c.get('id'):Path(c.get('local_root','')).resolve(strict=False) for c in cfg['clients'] if c.get('id') and c.get('local_root')}
+    removed_dirs=[]
+    for item in deleted:
+        root=roots.get(item['client_id'])
+        if not root:
+            continue
+        removed_dirs.extend(prune_empty_parents(Path(item['path']).parent,root))
+    removed_dirs=list(dict.fromkeys(removed_dirs))
+
     con=db(); ts=nowiso()
-    for (cid,name),(count,bytes_) in grouped.items(): con.execute('INSERT INTO deletions VALUES(?,?,?,?,?,?)',(ts,cid,name,count,bytes_,1 if automatic else 0))
-    con.commit(); con.close();
-    for x in deleted: state['orphans'].pop(x['id'],None)
-    if deleted: await notify('auto_delete' if automatic else 'manual_delete','Suppression terminée',f"{len(deleted)} fichier(s) supprimé(s), {sum(x['size'] for x in deleted)/1024**3:.2f} Gio")
-    return {'deleted':len(deleted),'bytes':sum(x['size'] for x in deleted),'skipped':skipped}
+    for (cid,name),(count,bytes_) in grouped.items():
+        con.execute('INSERT INTO deletions VALUES(?,?,?,?,?,?)',(ts,cid,name,count,bytes_,1 if automatic else 0))
+    con.commit(); con.close()
+    for x in deleted:
+        state['orphans'].pop(x['id'],None)
+
+    deleted_bytes=sum(x['size'] for x in deleted)
+    if deleted:
+        await notify(
+            'auto_delete' if automatic else 'manual_delete',
+            'Suppression terminée',
+            f"{len(deleted)} fichier(s) supprimé(s), {deleted_bytes/1024**3:.2f} Gio, {len(removed_dirs)} dossier(s) vide(s) supprimé(s)"
+        )
+    return {
+        'deleted':len(deleted),
+        'bytes':deleted_bytes,
+        'removed_dirs':len(removed_dirs),
+        'removed_dir_paths':removed_dirs,
+        'skipped':skipped
+    }
 
 @app.get('/',response_class=HTMLResponse)
 async def home(request:Request): return templates.TemplateResponse('index.html',{'request':request,'auth_enabled':auth_required()})
