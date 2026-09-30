@@ -2,6 +2,26 @@
 
 WebUI Docker légère pour repérer et supprimer les fichiers présents sur le stockage mais non liés à un client BitTorrent configuré.
 
+## Aperçu
+
+### Dashboard
+
+Vue d’ensemble des clients BitTorrent, des fichiers annoncés et trouvés, des orphelins détectés et de l’espace récupérable.
+
+![Dashboard Torrent Orphan Web](docs/screenshots/01-dashboard.png)
+
+### Configuration des clients
+
+Chaque client peut être configuré avec son API, sa WebUI, sa racine distante et le dossier local associé.
+
+![Configuration des clients BitTorrent](docs/screenshots/02-settings-clients.png)
+
+### Automatisation, notifications et sécurité
+
+Le panneau de configuration permet d’activer les scans automatiques, la suppression automatique optionnelle, les notifications Discord/Apprise et l’authentification WebUI.
+
+![Automatisation, notifications et authentification](docs/screenshots/03-settings-automation.png)
+
 ## Fonctionnalités
 
 - qBittorrent via WebAPI, avec clé API ou utilisateur/mot de passe ; compatible avec une WebUI alternative comme VueTorrent
@@ -56,3 +76,11 @@ Les chemins sont résolus sous `/data`. Toute résolution qui sortirait de cette
 ## rTorrent
 
 Le connecteur utilise XML-RPC HTTP. Si rTorrent n'expose que SCGI brut, son endpoint XML-RPC peut être exposé via nginx/ruTorrent, souvent sous `/RPC2`. Flood ou ruTorrent peuvent continuer à être utilisés comme WebUI indépendamment.
+
+## Publication et image Docker
+
+Le dépôt contient le workflow GitHub Actions chargé de construire l'image et de la publier sur GHCR après un push sur `main`.
+
+Le script local `publish_private.fish` fourni avec l'archive de distribution sert uniquement à créer le dépôt privé et à publier les sources. Il est explicitement exclu de Git et n'est pas publié dans le dépôt.
+
+Aucun build Docker local n'est nécessaire.
