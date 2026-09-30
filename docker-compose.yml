@@ -1,0 +1,17 @@
+services:
+  qbit-orphan-web:
+    image: ghcr.io/aerya/qbit-orphan-web:latest
+    container_name: qbit-orphan-web
+    ports:
+      - "8188:8080"
+    volumes:
+      # Configuration persistante créée et modifiée depuis la WebUI.
+      - ./config:/config
+
+      # Parent des volumes qBittorrent à analyser.
+      # Les sous-dossiers et mappings se règlent ensuite dans la WebUI.
+      - /mnt/torrent:/data:rw
+    environment:
+      - QOW_CONFIG_DIR=/config
+      - QOW_BROWSE_ROOT=/data
+    restart: unless-stopped

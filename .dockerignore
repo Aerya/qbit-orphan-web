@@ -1,0 +1,13 @@
+.git
+.github
+config
+.env
+.env.*
+__pycache__
+*.pyc
+.pytest_cache
+test
+tests
+publish_private.fish
+patch_client_webui_links.fish
+*.zip
