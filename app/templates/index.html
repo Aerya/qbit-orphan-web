@@ -8,7 +8,7 @@
 <section class="stats panel"><div class="stat">Torrents<b id="torrentsN">—</b></div><div class="stat">Fichiers annoncés<b id="announcedN">—</b></div><div class="stat">Fichiers trouvés<b id="foundN">—</b></div><div class="stat">Orphelins<b id="orphansN">—</b></div><div class="stat">Espace récupérable<b id="orphansB">—</b></div><div class="stat">Dernier scan<b id="last" style="font-size:14px">—</b></div></section>
 <section class="panel"><h2 style="margin-bottom:12px">Clients</h2><div id="clientStats" class="clientstats"></div></section>
 <section class="panel"><div class="toolbar"><div class="tabs" id="tabs"></div><div class="row"><input id="search" type="search" placeholder="Filtrer par chemin…"><button class="primary" id="scanBtn">↻ Scanner</button></div></div></section>
-<section class="panel"><div class="toolbar" style="margin-bottom:10px"><label><input type="checkbox" id="selectVisible"> Tout sélectionner</label><span id="selectionInfo" class="muted">0 sélectionné</span><div class="row"><button id="deleteBtn" class="danger" disabled>Supprimer la sélection</button></div></div><div class="tablewrap"><table><thead><tr><th></th><th>Client</th><th>Chemin</th><th>Taille</th><th>Modifié</th><th>Orphelin depuis</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+<section class="panel"><div class="toolbar" style="margin-bottom:10px"><label><input type="checkbox" id="selectVisible"> Tout sélectionner</label><span id="selectionInfo" class="muted">0 sélectionné</span><span id="deleteStatus" class="muted"></span><div class="row"><button id="deleteBtn" class="danger" disabled>Supprimer la sélection</button></div></div><div class="tablewrap"><table><thead><tr><th></th><th>Client</th><th>Chemin</th><th>Taille</th><th>Modifié</th><th>Orphelin depuis</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 
 <footer class="app-footer"><div>Fait avec <span class="heart">♥</span> par Aerya</div><div class="row"><a href="https://github.com/Aerya/qbit-orphan-web" target="_blank" rel="noopener">GitHub</a><span>•</span><a href="https://upandclear.org" target="_blank" rel="noopener">Blog</a><span>•</span><a href="https://ko-fi.com/upandclear" target="_blank" rel="noopener">Ko-fi</a></div></footer>
 
@@ -33,7 +33,39 @@ function renderClientStats(st){window.clientStats=st||[];$('clientStats').innerH
 async function loadState(){let r=await fetch('/api/state');if(r.status===401){location='/login';return}let d=await r.json();items=d.orphans||[];selected=new Set([...selected].filter(id=>items.some(x=>x.id===id)));$('torrentsN').textContent=(d.stats?.torrents??'—').toLocaleString?.('fr-FR')??'—';$('announcedN').textContent=(d.stats?.announced_files??'—').toLocaleString?.('fr-FR')??'—';$('foundN').textContent=(d.stats?.found_files??'—').toLocaleString?.('fr-FR')??'—';$('orphansN').textContent=d.stats?.orphan_files??'—';$('orphansB').textContent=d.stats?.orphan_bytes!=null?fb(d.stats.orphan_bytes):'—';$('last').textContent=d.last_scan?new Date(d.last_scan).toLocaleString('fr-FR'):'—';renderClientStats(d.client_stats);renderRows();if(d.errors?.length)showErr(d.errors.join(' | '))}
 function showErr(s){$('error').style.display='block';$('error').textContent=s}function clearErr(){$('error').style.display='none'}
 async function scan(){clearErr();const b=$('scanBtn'),label=b.innerHTML;b.disabled=true;b.setAttribute('aria-busy','true');b.innerHTML='<span class="spin">↻</span> Scan en cours…';try{let r=await fetch('/api/scan',{method:'POST'}),d=await r.json();if(!r.ok)throw Error(d.detail||'Erreur');await loadState()}catch(e){showErr(e.message)}finally{b.disabled=false;b.removeAttribute('aria-busy');b.innerHTML=label}}
-async function del(ids){if(!ids.length)return;if(!confirm(`Supprimer définitivement ${ids.length} fichier(s) ?`))return;let r=await fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})}),d=await r.json();if(!r.ok)return showErr(d.detail||'Erreur');selected.clear();await loadState()}
+async function del(ids){
+  if(!ids.length)return;
+  const bytes=items.filter(x=>ids.includes(x.id)).reduce((a,x)=>a+x.size,0);
+  if(!confirm(`Supprimer définitivement ${ids.length} fichier(s) (${fb(bytes)}) ?`))return;
+  clearErr();
+  const b=$('deleteBtn'),label=b.innerHTML,scan=$('scanBtn'),all=$('selectVisible'),status=$('deleteStatus');
+  b.disabled=true;
+  scan.disabled=true;
+  all.disabled=true;
+  b.setAttribute('aria-busy','true');
+  b.innerHTML='<span class="spin">↻</span> Suppression en cours…';
+  status.textContent=`Suppression en cours · ${ids.length} fichier(s) · ${fb(bytes)}`;
+  try{
+    let r=await fetch('/api/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids})});
+    let d=await r.json();
+    if(!r.ok)throw Error(d.detail||'Erreur');
+    selected.clear();
+    await loadState();
+    let parts=[`${d.deleted} fichier(s) supprimé(s)`,`${fb(d.bytes)} libérés`];
+    if(d.removed_dirs)parts.push(`${d.removed_dirs} dossier(s) vide(s) supprimé(s)`);
+    if(d.skipped?.length)parts.push(`${d.skipped.length} ignoré(s)`);
+    status.textContent='✓ '+parts.join(' · ');
+  }catch(e){
+    status.textContent='✗ Échec de la suppression';
+    showErr(e.message);
+  }finally{
+    b.removeAttribute('aria-busy');
+    b.innerHTML=label;
+    scan.disabled=false;
+    all.disabled=false;
+    updateSel();
+  }
+}
 function clientHtml(c={}){let id=c.id||idgen(),type=c.type||'qbittorrent';return`<div class="client" data-id="${id}"><div class="client-head"><h3>${esc(c.name||'Client')}</h3><div class="row"><span class="testResult muted"></span><button class="mini testClient">Tester</button><button class="danger mini removeClient">Supprimer</button></div></div><div class="grid" style="margin-top:10px"><div class="field"><label>Type</label><select class="c-type"><option value="qbittorrent" ${type==='qbittorrent'?'selected':''}>qBittorrent</option><option value="rtorrent" ${type==='rtorrent'?'selected':''}>rTorrent XML-RPC</option></select></div><div class="field"><label>Nom</label><input class="c-name" value="${esc(c.name||'')}"></div><div class="field"><label>URL API / XML-RPC</label><input class="c-url" value="${esc(c.url||'')}" placeholder="http://.../RPC2"></div><div class="field"><label>URL WebUI</label><input class="c-webui" value="${esc(c.webui_url||'')}" placeholder="Optionnelle — URL API utilisée pour qBittorrent si vide"></div></div><div class="qbitFields"><div class="grid3" style="margin-top:10px"><div class="field"><label>Clé API qBit</label><input class="c-api" type="password" value="${esc(c.api_key||'')}"></div><div class="field"><label>Utilisateur qBit</label><input class="c-user" value="${esc(c.username||'')}"></div><div class="field"><label>Mot de passe qBit</label><input class="c-pass" type="password" value="${esc(c.password||'')}"></div></div></div><div class="grid" style="margin-top:10px"><div class="field"><label>Racine vue par le client</label><input class="c-remote" value="${esc(c.remote_root||'/downloads')}"></div><div class="field"><label>Dossier local associé</label><div class="folder"><input class="c-local" readonly value="${esc(c.local_root||'')}"><button class="mini browse">Parcourir</button></div></div></div></div>`}
 function bindClients(){document.querySelectorAll('.client').forEach(el=>{el.querySelector('.removeClient').onclick=()=>el.remove();el.querySelector('.browse').onclick=()=>openBrowser(el.querySelector('.c-local'));el.querySelector('.testClient').onclick=()=>testClient(el);el.querySelector('.c-type').onchange=()=>toggleType(el);toggleType(el)})}
 function toggleType(el){el.querySelector('.qbitFields').style.display=el.querySelector('.c-type').value==='qbittorrent'?'block':'none'}
