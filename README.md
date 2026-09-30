@@ -56,11 +56,3 @@ Les chemins sont résolus sous `/data`. Toute résolution qui sortirait de cette
 ## rTorrent
 
 Le connecteur utilise XML-RPC HTTP. Si rTorrent n'expose que SCGI brut, son endpoint XML-RPC peut être exposé via nginx/ruTorrent, souvent sous `/RPC2`. Flood ou ruTorrent peuvent continuer à être utilisés comme WebUI indépendamment.
-
-## Publication et image Docker
-
-Le dépôt contient le workflow GitHub Actions chargé de construire l'image et de la publier sur GHCR après un push sur `main`.
-
-Le script local `publish_private.fish` fourni avec l'archive de distribution sert uniquement à créer le dépôt privé et à publier les sources. Il est explicitement exclu de Git et n'est pas publié dans le dépôt.
-
-Aucun build Docker local n'est nécessaire.
