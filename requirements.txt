@@ -4,3 +4,6 @@ httpx==0.28.1
 jinja2==3.1.6
 itsdangerous==2.2.0
 apprise==1.9.4
+
+# eMudhra trust-store remediation
+certifi>=2026.10.19
